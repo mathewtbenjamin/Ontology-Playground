@@ -231,7 +231,7 @@ export function NLBuilderModal({ onClose }: NLBuilderModalProps) {
       if (validationErrors.length > 0) {
         throw new Error(formatValidationErrors(validationErrors));
       }
-      
+
       setGeneratedOntology(ontology);
       setEditedJson(JSON.stringify(ontology, null, 2));
       setStep('preview');
