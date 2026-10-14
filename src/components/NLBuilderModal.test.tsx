@@ -44,7 +44,23 @@ function createOntology(hasIdentifier = true): Ontology {
   };
 }
 
-function mockGeneratedOntology(ontology: Ontology): void {
+function createMalformedOntology(): Record<string, unknown> {
+  const ontology = createOntology();
+  return {
+    ...ontology,
+    entityTypes: [{
+      ...ontology.entityTypes[0],
+      id: 1,
+      properties: [{
+        name: 'productId',
+        type: 'string',
+        isIdentifier: 'false',
+      }],
+    }],
+  };
+}
+
+function mockGeneratedOntology(ontology: unknown): void {
   fetchMock.mockResolvedValue({
     ok: true,
     json: () => Promise.resolve({ ontology }),
@@ -82,6 +98,24 @@ describe('NLBuilderModal validation', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it('rejects malformed generated ontology field types', async () => {
+    mockGeneratedOntology(createMalformedOntology());
+    const user = userEvent.setup();
+
+    render(<NLBuilderModal onClose={onClose} />);
+    await user.type(
+      screen.getByPlaceholderText('Describe your business scenario...'),
+      'Track products in inventory',
+    );
+    await user.click(screen.getByRole('button', { name: 'Generate Ontology' }));
+
+    expect(await screen.findByText('Generation Failed')).toBeInTheDocument();
+    expect(screen.getByText(/entityTypes\[0\]\.id must be a string/)).toBeInTheDocument();
+    expect(screen.getByText(/isIdentifier must be a boolean/)).toBeInTheDocument();
+    expect(useAppStore.getState().currentOntology.name).toBe('Fourth Coffee');
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it('rejects invalid JSON edits before applying them', async () => {
     mockGeneratedOntology(createOntology());
     const user = userEvent.setup();
@@ -101,6 +135,30 @@ describe('NLBuilderModal validation', () => {
     await user.click(screen.getByRole('button', { name: 'Apply Ontology' }));
 
     expect(screen.getByText(/has no identifier property/)).toBeInTheDocument();
+    expect(useAppStore.getState().currentOntology.name).toBe('Fourth Coffee');
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed JSON field types before applying them', async () => {
+    mockGeneratedOntology(createOntology());
+    const user = userEvent.setup();
+
+    render(<NLBuilderModal onClose={onClose} />);
+    await user.type(
+      screen.getByPlaceholderText('Describe your business scenario...'),
+      'Track products in inventory',
+    );
+    await user.click(screen.getByRole('button', { name: 'Generate Ontology' }));
+    expect(await screen.findByText('Generated Inventory')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Edit JSON' }));
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: JSON.stringify(createMalformedOntology()) },
+    });
+    await user.click(screen.getByRole('button', { name: 'Apply Ontology' }));
+
+    expect(screen.getByText(/entityTypes\[0\]\.id must be a string/)).toBeInTheDocument();
+    expect(screen.getByText(/isIdentifier must be a boolean/)).toBeInTheDocument();
     expect(useAppStore.getState().currentOntology.name).toBe('Fourth Coffee');
     expect(onClose).not.toHaveBeenCalled();
   });
