@@ -3,6 +3,7 @@ import { ArrowLeft, BookOpen, ChevronRight, Sun, Moon, FlaskConical, GraduationC
 import { AppFooter } from './AppFooter';
 import { useAppStore, themeClass } from '../store/appStore';
 import { navigate } from '../lib/router';
+import { isValidCatalogueId } from '../lib/catalogueId';
 import type { Route } from '../lib/router';
 import type { LearnManifest, LearnCourse, LearnArticle } from '../types/learn';
 import type { Catalogue } from '../types/catalogue';
@@ -197,6 +198,37 @@ function CourseDetail({ course }: { course: LearnCourse }) {
 // Article View
 // -------------------------------------------------------------------
 
+function replaceEmbedPlaceholder(
+  element: Element,
+  defaultHeight: string,
+  embedDarkMode: boolean,
+) {
+  const id = element.getAttribute('id');
+  const diffId = element.getAttribute('diff');
+  if (!isValidCatalogueId(id) || (diffId && !isValidCatalogueId(diffId))) {
+    const error = document.createElement('div');
+    error.className = 'learn-embed-error';
+    error.textContent = 'Invalid ontology reference';
+    element.replaceWith(error);
+    return;
+  }
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'learn-embed-slot';
+  wrapper.style.height = element.getAttribute('height') || defaultHeight;
+  wrapper.dataset.catalogueId = id;
+  wrapper.dataset.theme = embedDarkMode ? 'dark' : 'light';
+  if (diffId) wrapper.dataset.diffId = diffId;
+  element.replaceWith(wrapper);
+}
+
+function renderEmbedError(slot: HTMLElement, message: string) {
+  const error = document.createElement('div');
+  error.className = 'learn-embed-error';
+  error.textContent = message;
+  slot.replaceChildren(error);
+}
+
 function ArticleView({
   article,
   course,
@@ -227,17 +259,7 @@ function ArticleView({
     if (!contentRef.current) return;
     const placeholders = contentRef.current.querySelectorAll('ontology-embed');
     for (const el of placeholders) {
-      const id = el.getAttribute('id');
-      const height = el.getAttribute('height') || '400px';
-      const diff = el.getAttribute('diff') || '';
-      if (!id) continue;
-      const wrapper = document.createElement('div');
-      wrapper.className = 'learn-embed-slot';
-      wrapper.style.height = height;
-      wrapper.dataset.catalogueId = id;
-      wrapper.dataset.theme = darkMode ? 'dark' : 'light';
-      if (diff) wrapper.dataset.diffId = diff;
-      el.replaceWith(wrapper);
+      replaceEmbedPlaceholder(el, '400px', darkMode);
     }
   }, [article.slug, darkMode]);
 
@@ -258,7 +280,7 @@ function ArticleView({
           const diffId = slot.dataset.diffId;
           const entry = catalogue.entries.find((e) => e.id === id);
           if (!entry) {
-            slot.innerHTML = `<div class="learn-embed-error">Ontology "${id}" not found in catalogue</div>`;
+            renderEmbedError(slot, `Ontology "${id}" not found in catalogue`);
             continue;
           }
           // Find the previous-step entry for diff
@@ -279,7 +301,7 @@ function ArticleView({
       .catch(() => {
         if (cancelled) return;
         for (const slot of slots) {
-          slot.innerHTML = '<div class="learn-embed-error">Failed to load catalogue</div>';
+          renderEmbedError(slot, 'Failed to load catalogue');
         }
       });
     return () => { cancelled = true; };
@@ -469,12 +491,14 @@ export function splitIntoSlides(html: string, title: string): Slide[] {
   let currentSlide = document.createElement('div');
 
   const titleSlide = document.createElement('div');
-  titleSlide.innerHTML = `<h1>${title}</h1>`;
+  const titleHeading = document.createElement('h1');
+  titleHeading.textContent = title;
+  titleSlide.appendChild(titleHeading);
 
   const flushContent = (content: string) => {
     if (!content) return;
     if (slides.length === 0) {
-      titleSlide.innerHTML += content;
+      titleSlide.insertAdjacentHTML('beforeend', content);
     } else {
       slides.push({ type: 'content', html: content });
     }
@@ -513,18 +537,8 @@ export function splitIntoSlides(html: string, title: string): Slide[] {
     }
   }
   const remaining = currentSlide.innerHTML.trim();
-  if (remaining) {
-    if (slides.length === 0) {
-      // No h2 found — prepend title
-      slides.push({ type: 'content', html: `<h1>${title}</h1>${remaining}` });
-    } else {
-      slides.push({ type: 'content', html: remaining });
-    }
-  }
-
-  if (slides.length === 0) {
-    slides.push({ type: 'content', html: `<h1>${title}</h1>${html}` });
-  }
+  flushContent(remaining);
+  ensureTitleFlushed();
 
   return slides;
 }
@@ -630,17 +644,7 @@ function PresentationMode({
 
     const placeholders = slideRef.current.querySelectorAll('ontology-embed');
     for (const el of placeholders) {
-      const id = el.getAttribute('id');
-      const height = el.getAttribute('height') || '350px';
-      const diff = el.getAttribute('diff') || '';
-      if (!id) continue;
-      const wrapper = document.createElement('div');
-      wrapper.className = 'learn-embed-slot';
-      wrapper.style.height = height;
-      wrapper.dataset.catalogueId = id;
-      wrapper.dataset.theme = presenterDark ? 'dark' : 'light';
-      if (diff) wrapper.dataset.diffId = diff;
-      el.replaceWith(wrapper);
+      replaceEmbedPlaceholder(el, '350px', presenterDark);
     }
     // Hydrate
     const slots = slideRef.current.querySelectorAll<HTMLElement>('.learn-embed-slot');

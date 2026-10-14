@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '../store/appStore';
 import { processQuery, generateQuerySuggestions } from '../data/queryEngine';
+import { parseInlineEmphasis } from '../lib/contentSafety';
 import { Search, Sparkles, X, Lightbulb } from 'lucide-react';
 
 export function QueryPlayground() {
@@ -66,16 +67,20 @@ export function QueryPlayground() {
     clearHighlights();
   };
 
-  // Convert markdown-like formatting to simple HTML-like display
   const formatResult = (text: string) => {
-    return text
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/_(.+?)_/g, '<em>$1</em>')
-      .split('\n')
-      .map((line, i) => (
+    const lines = text.split('\n');
+    return lines.map((line, i) => (
         <span key={i}>
-          <span dangerouslySetInnerHTML={{ __html: line }} />
-          {i < text.split('\n').length - 1 && <br />}
+          {parseInlineEmphasis(line).map((segment, segmentIndex) => {
+            if (segment.kind === 'strong') {
+              return <strong key={segmentIndex}>{segment.text}</strong>;
+            }
+            if (segment.kind === 'emphasis') {
+              return <em key={segmentIndex}>{segment.text}</em>;
+            }
+            return <span key={segmentIndex}>{segment.text}</span>;
+          })}
+          {i < lines.length - 1 && <br />}
         </span>
       ));
   };

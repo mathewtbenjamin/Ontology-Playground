@@ -189,6 +189,27 @@ describe('convertToFabricParts', () => {
     expect(relParts).toHaveLength(1);
   });
 
+  it('does not export class hierarchy edges as Fabric relationship types', () => {
+    const ontologyWithSubclass: Ontology = {
+      ...minimalOntology,
+      relationships: [
+        ...minimalOntology.relationships,
+        {
+          id: 'order-subClassOf-customer',
+          name: 'subClassOf',
+          from: 'order',
+          to: 'customer',
+          cardinality: 'many-to-one',
+          kind: 'subclass',
+        },
+      ],
+    };
+
+    const { definition } = convertToFabricParts(ontologyWithSubclass);
+    const relParts = definition.parts.filter(p => p.path.startsWith('RelationshipTypes/'));
+    expect(relParts).toHaveLength(1);
+  });
+
   it('generates unique numeric IDs', () => {
     const { definition } = convertToFabricParts(minimalOntology);
     const entityParts = definition.parts.filter(p => p.path.startsWith('EntityTypes/'));

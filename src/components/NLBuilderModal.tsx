@@ -5,6 +5,7 @@ import { useAppStore } from '../store/appStore';
 import { validateOntology } from '../store/designerStore';
 import type { ValidationError } from '../store/designerStore';
 import type { Ontology } from '../data/ontology';
+import { buildApiUrl } from '../lib/api';
 
 // Web Speech API types
 interface SpeechRecognitionEvent extends Event {
@@ -204,7 +205,7 @@ export function NLBuilderModal({ onClose }: NLBuilderModalProps) {
     setError(null);
     
     try {
-      const response = await fetch('/api/generate-ontology', {
+      const response = await fetch(buildApiUrl('generate-ontology'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ description: description.trim() }),

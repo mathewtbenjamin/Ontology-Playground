@@ -17,6 +17,7 @@ import type { Ontology, EntityType, Relationship } from '../data/ontology';
 import { serializeToRDF } from '../lib/rdf/serializer';
 import { parseRDF } from '../lib/rdf/parser';
 import { highlightRdf, RDF_HIGHLIGHT_DARK, RDF_HIGHLIGHT_LIGHT } from '../lib/rdf/highlighter';
+import { isLargeOntologyGraph } from '../lib/ontologyScale';
 import type { Catalogue } from '../types/catalogue';
 
 cytoscape.use(fcose);
@@ -265,13 +266,20 @@ interface EmbedGraphProps {
 function EmbedGraph({ ontology, theme, setSelected }: EmbedGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
+  const largeGraph = isLargeOntologyGraph(ontology);
 
   const elements = useMemo(() => {
     const nodes = ontology.entityTypes.map((e) => ({
       data: { id: e.id, label: `${e.icon} ${e.name}`, color: e.color },
     }));
     const edges = ontology.relationships.map((r) => ({
-      data: { id: r.id, source: r.from, target: r.to, label: r.name },
+      data: {
+        id: r.id,
+        source: r.from,
+        target: r.to,
+        label: r.name,
+        kind: r.kind ?? 'association',
+      },
     }));
     return [...nodes, ...edges];
   }, [ontology]);
@@ -300,7 +308,7 @@ function EmbedGraph({ ontology, theme, setSelected }: EmbedGraphProps) {
         {
           selector: 'edge',
           style: {
-            label: 'data(label)', 'font-size': '11px', 'font-family': 'Segoe UI, sans-serif',
+            label: largeGraph ? '' : 'data(label)', 'font-size': '11px', 'font-family': 'Segoe UI, sans-serif',
             color: theme.edgeText, 'text-rotation': 'autorotate', 'text-margin-y': -8,
             width: 2, 'line-color': theme.edgeColor, 'target-arrow-color': theme.edgeColor,
             'target-arrow-shape': 'triangle', 'curve-style': 'unbundled-bezier',
@@ -308,17 +316,25 @@ function EmbedGraph({ ontology, theme, setSelected }: EmbedGraphProps) {
           },
         },
         {
+          selector: 'edge[kind = "subclass"]',
+          style: { 'line-style': 'dashed' },
+        },
+        {
           selector: 'edge:selected',
           style: { width: 4, 'line-color': theme.accent, 'target-arrow-color': theme.accent, color: theme.accent },
         },
       ],
-      layout: {
-        name: 'fcose', quality: 'proof', randomize: true, animate: false,
-        fit: true, padding: 40, nodeDimensionsIncludeLabels: true,
-        nodeRepulsion: () => 12000, idealEdgeLength: () => 180,
-        edgeElasticity: () => 0.45, nodeSeparation: 80,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any,
+      layout: (largeGraph
+        ? {
+            name: 'grid', animate: false, fit: true, padding: 30,
+          }
+        : {
+            name: 'fcose', quality: 'proof', randomize: true, animate: false,
+            fit: true, padding: 40, nodeDimensionsIncludeLabels: true,
+            nodeRepulsion: () => 12000, idealEdgeLength: () => 180,
+            edgeElasticity: () => 0.45, nodeSeparation: 80,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          }) as any,
       minZoom: 0.3, maxZoom: 3,
       userPanningEnabled: true,
       userZoomingEnabled: true,
@@ -344,9 +360,16 @@ function EmbedGraph({ ontology, theme, setSelected }: EmbedGraphProps) {
 
     cyRef.current = cy;
     return () => { cy.destroy(); cyRef.current = null; };
-  }, [elements, theme, ontology, setSelected]);
+  }, [elements, largeGraph, theme, ontology, setSelected]);
 
-  return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />;
+  return (
+    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      {largeGraph && (
+        <div className="graph-scale-badge">Large ontology: using the fast grid layout</div>
+      )}
+    </div>
+  );
 }
 
 // ─── RDF Source ──────────────────────────────────────────────────────────────

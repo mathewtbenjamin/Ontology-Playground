@@ -42,6 +42,17 @@ The easiest way to contribute is to add an ontology to the community catalogue:
    ```
    catalogue/community/<your-github-username>/<ontology-slug>/
    ```
+   Every directory name must contain only lowercase letters, numbers, hyphens,
+   or underscores. The catalogue build rejects unsafe directory names,
+   symlinks (including catalogue and tier roots), and unsupported filesystem
+   entries instead of silently skipping them. The catalogue root may contain
+   only the `official`, `community`, and `external` directories plus regular
+   files such as `metadata-schema.json`. Regular files alongside catalogue
+   directories are ignored so grouping-level documentation is allowed.
+   Ontology-entry directories may contain regular files only; nested
+   directories and symlinks are rejected. An empty directory in an
+   ontology-entry position is treated as an intended entry and fails
+   validation because its RDF and metadata are missing.
 3. Add two files:
    - **`<ontology-slug>.rdf`** — your ontology in RDF/OWL format (you can
      export from the Ontology Playground UI)
@@ -81,6 +92,13 @@ The `metadata.json` file must conform to the schema at
 | `icon`        | No       | Emoji icon for display                                   |
 | `tags`        | No       | Array of tags for filtering                              |
 | `author`      | No       | Your GitHub username or name                             |
+| `license`     | No       | SPDX identifier or short license name                   |
+| `sourceUrl`   | No       | Canonical HTTPS URL for an adapted upstream ontology    |
+| `version`     | No       | Upstream ontology version represented by the entry      |
+
+If a community entry adapts an existing open ontology, include its license,
+canonical source URL, and version when known. Entries under
+`catalogue/external/` must provide both `license` and `sourceUrl`.
 
 ### Contributing Code
 

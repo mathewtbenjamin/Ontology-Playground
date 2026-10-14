@@ -2,7 +2,10 @@ import { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { X, Upload, Download, FileJson, AlertCircle, CheckCircle, RotateCcw, Copy, FileText, Table, Share2, Cloud } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
-import { serializeToRDF } from '../lib/rdf/serializer';
+import {
+  serializeToRDF,
+  type RdfExportProfile,
+} from '../lib/rdf/serializer';
 import { parseRDF, RDFParseError } from '../lib/rdf/parser';
 import type { Ontology, DataBinding } from '../data/ontology';
 
@@ -50,6 +53,7 @@ export function ImportExportModal({ onClose, onFabricPush }: ImportExportModalPr
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [exportFormat, setExportFormat] = useState<'json' | 'yaml' | 'csv' | 'rdf'>('rdf');
+  const [rdfExportProfile, setRdfExportProfile] = useState<RdfExportProfile>('playground');
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -126,7 +130,11 @@ export function ImportExportModal({ onClose, onFabricPush }: ImportExportModalPr
       mimeType = 'text/csv';
       extension = 'csv';
     } else if (exportFormat === 'rdf') {
-      content = serializeToRDF(currentOntology, dataBindings);
+      content = serializeToRDF(
+        currentOntology,
+        dataBindings,
+        { profile: rdfExportProfile },
+      );
       mimeType = 'application/rdf+xml';
       extension = 'rdf';
     } else {
@@ -139,7 +147,11 @@ export function ImportExportModal({ onClose, onFabricPush }: ImportExportModalPr
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${currentOntology.name.toLowerCase().replace(/\s+/g, '-')}-ontology.${extension}`;
+    const rdfSuffix = rdfExportProfile === 'standards'
+      ? 'owl-shacl'
+      : 'playground';
+    const suffix = exportFormat === 'rdf' ? rdfSuffix : 'ontology';
+    link.download = `${currentOntology.name.toLowerCase().replace(/\s+/g, '-')}-${suffix}.${extension}`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -468,12 +480,85 @@ export function ImportExportModal({ onClose, onFabricPush }: ImportExportModalPr
                     alignItems: 'center',
                     gap: 4
                   }}
-                  title="RDF/XML format for MS Fabric"
+                  title="RDF/XML export"
                 >
                   <Share2 size={12} />
                   RDF
                 </button>
               </div>
+            )}
+
+            {exportFormat === 'rdf' && (
+              <fieldset style={{
+                border: 0,
+                margin: '0 0 12px',
+                padding: 0,
+                textAlign: 'left',
+              }}>
+                <legend style={{
+                  color: 'var(--text-secondary)',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  marginBottom: 6,
+                }}>
+                  RDF export profile
+                </legend>
+                <button
+                  type="button"
+                  aria-pressed={rdfExportProfile === 'playground'}
+                  onClick={() => setRdfExportProfile('playground')}
+                  style={{
+                    background: rdfExportProfile === 'playground'
+                      ? 'rgba(0, 120, 212, 0.15)'
+                      : 'var(--bg-secondary)',
+                    border: rdfExportProfile === 'playground'
+                      ? '1px solid var(--ms-blue)'
+                      : '1px solid var(--border-primary)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: 'var(--text-primary)',
+                    cursor: 'pointer',
+                    display: 'block',
+                    marginBottom: 6,
+                    padding: 8,
+                    textAlign: 'left',
+                    width: '100%',
+                  }}
+                >
+                  <span style={{ display: 'block', fontSize: 12, fontWeight: 600 }}>
+                    Playground round-trip
+                  </span>
+                  <span style={{ color: 'var(--text-tertiary)', display: 'block', fontSize: 10, marginTop: 2 }}>
+                    Preserves icons, colors, bindings, and other Playground metadata.
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={rdfExportProfile === 'standards'}
+                  onClick={() => setRdfExportProfile('standards')}
+                  style={{
+                    background: rdfExportProfile === 'standards'
+                      ? 'rgba(0, 120, 212, 0.15)'
+                      : 'var(--bg-secondary)',
+                    border: rdfExportProfile === 'standards'
+                      ? '1px solid var(--ms-blue)'
+                      : '1px solid var(--border-primary)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: 'var(--text-primary)',
+                    cursor: 'pointer',
+                    display: 'block',
+                    padding: 8,
+                    textAlign: 'left',
+                    width: '100%',
+                  }}
+                >
+                  <span style={{ display: 'block', fontSize: 12, fontWeight: 600 }}>
+                    Standards-oriented OWL + SHACL
+                  </span>
+                  <span style={{ color: 'var(--text-tertiary)', display: 'block', fontSize: 10, marginTop: 2 }}>
+                    Uses standard vocabulary for order, enums, identifiers, and cardinality.
+                  </span>
+                </button>
+              </fieldset>
             )}
             
             <button 

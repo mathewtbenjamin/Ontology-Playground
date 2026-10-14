@@ -61,6 +61,7 @@ export function RelationshipForm() {
 
       {ontology.relationships.map((rel) => {
         const isSelected = selectedRelationshipId === rel.id;
+        const isSubclass = rel.kind === 'subclass';
         const fromEntity = entities.find((e) => e.id === rel.from);
         const toEntity = entities.find((e) => e.id === rel.to);
 
@@ -88,20 +89,26 @@ export function RelationshipForm() {
             {isSelected && (
               <div className="designer-rel-body">
                 {/* Name */}
-                <label className="designer-field">
-                  <span>Name</span>
-                  <input
-                    type="text"
-                    value={rel.name}
-                    onChange={(e) => updateRelationship(rel.id, { name: e.target.value })}
-                    placeholder="Relationship name"
-                  />
-                </label>
+                {isSubclass ? (
+                  <div className="designer-import-error">
+                    Class hierarchy edge (`rdfs:subClassOf`). It remains a subclass statement on RDF export.
+                  </div>
+                ) : (
+                  <label className="designer-field">
+                    <span>Name</span>
+                    <input
+                      type="text"
+                      value={rel.name}
+                      onChange={(e) => updateRelationship(rel.id, { name: e.target.value })}
+                      placeholder="Relationship name"
+                    />
+                  </label>
+                )}
 
                 {/* Source / Target */}
                 <div className="designer-field-row">
                   <label className="designer-field">
-                    <span>From</span>
+                    <span>{isSubclass ? 'Subclass' : 'From'}</span>
                     <select
                       value={rel.from}
                       onChange={(e) => updateRelationship(rel.id, { from: e.target.value })}
@@ -112,7 +119,7 @@ export function RelationshipForm() {
                     </select>
                   </label>
                   <label className="designer-field">
-                    <span>To</span>
+                    <span>{isSubclass ? 'Parent class' : 'To'}</span>
                     <select
                       value={rel.to}
                       onChange={(e) => updateRelationship(rel.id, { to: e.target.value })}
@@ -125,19 +132,21 @@ export function RelationshipForm() {
                 </div>
 
                 {/* Cardinality */}
-                <label className="designer-field">
-                  <span>Cardinality</span>
-                  <select
-                    value={rel.cardinality}
-                    onChange={(e) =>
-                      updateRelationship(rel.id, { cardinality: e.target.value as Relationship['cardinality'] })
-                    }
-                  >
-                    {CARDINALITY_OPTIONS.map((c) => (
-                      <option key={c} value={c}>{CARDINALITY_LABELS[c]}</option>
-                    ))}
-                  </select>
-                </label>
+                {!isSubclass && (
+                  <label className="designer-field">
+                    <span>Cardinality</span>
+                    <select
+                      value={rel.cardinality}
+                      onChange={(e) =>
+                        updateRelationship(rel.id, { cardinality: e.target.value as Relationship['cardinality'] })
+                      }
+                    >
+                      {CARDINALITY_OPTIONS.map((c) => (
+                        <option key={c} value={c}>{CARDINALITY_LABELS[c]}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
 
                 {/* Description */}
                 <label className="designer-field">
@@ -151,46 +160,48 @@ export function RelationshipForm() {
                 </label>
 
                 {/* Attributes */}
-                <div className="designer-field">
-                  <div className="designer-section-header">
-                    <span>Attributes ({rel.attributes?.length ?? 0})</span>
-                    <button
-                      className="designer-add-btn small"
-                      onClick={() => addRelationshipAttribute(rel.id)}
-                    >
-                      <Plus size={12} /> Add
-                    </button>
-                  </div>
-                  {(rel.attributes ?? []).map((attr, idx) => (
-                    <div key={idx} className="designer-property-row">
-                      <input
-                        className="designer-prop-name"
-                        type="text"
-                        value={attr.name}
-                        onChange={(e) =>
-                          updateRelationshipAttribute(rel.id, idx, { name: e.target.value })
-                        }
-                        placeholder="Attribute name"
-                      />
-                      <input
-                        className="designer-prop-type"
-                        type="text"
-                        value={attr.type}
-                        onChange={(e) =>
-                          updateRelationshipAttribute(rel.id, idx, { type: e.target.value })
-                        }
-                        placeholder="Type"
-                      />
+                {!isSubclass && (
+                  <div className="designer-field">
+                    <div className="designer-section-header">
+                      <span>Attributes ({rel.attributes?.length ?? 0})</span>
                       <button
-                        className="designer-delete-btn small"
-                        onClick={() => removeRelationshipAttribute(rel.id, idx)}
-                        title="Remove attribute"
+                        className="designer-add-btn small"
+                        onClick={() => addRelationshipAttribute(rel.id)}
                       >
-                        <Trash2 size={12} />
+                        <Plus size={12} /> Add
                       </button>
                     </div>
-                  ))}
-                </div>
+                    {(rel.attributes ?? []).map((attr, idx) => (
+                      <div key={idx} className="designer-property-row">
+                        <input
+                          className="designer-prop-name"
+                          type="text"
+                          value={attr.name}
+                          onChange={(e) =>
+                            updateRelationshipAttribute(rel.id, idx, { name: e.target.value })
+                          }
+                          placeholder="Attribute name"
+                        />
+                        <input
+                          className="designer-prop-type"
+                          type="text"
+                          value={attr.type}
+                          onChange={(e) =>
+                            updateRelationshipAttribute(rel.id, idx, { type: e.target.value })
+                          }
+                          placeholder="Type"
+                        />
+                        <button
+                          className="designer-delete-btn small"
+                          onClick={() => removeRelationshipAttribute(rel.id, idx)}
+                          title="Remove attribute"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

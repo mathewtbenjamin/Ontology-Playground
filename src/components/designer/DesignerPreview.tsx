@@ -7,6 +7,10 @@ import { useAppStore, type ThemeId } from '../../store/appStore';
 import { serializeToRDF } from '../../lib/rdf/serializer';
 import { parseRDF } from '../../lib/rdf/parser';
 import { highlightRdf, RDF_HIGHLIGHT_DARK, RDF_HIGHLIGHT_LIGHT } from '../../lib/rdf/highlighter';
+import {
+  isLargeOntologyGraph,
+  ontologyGraphElementCount,
+} from '../../lib/ontologyScale';
 
 cytoscape.use(fcose);
 
@@ -49,7 +53,17 @@ export function DesignerPreview() {
 // ─── Graph tab ───────────────────────────────────────────────────────────────
 
 interface GraphPreviewProps {
-  ontology: { entityTypes: { id: string; name: string; icon: string; color: string }[]; relationships: { id: string; name: string; from: string; to: string; cardinality: string }[] };
+  ontology: {
+    entityTypes: { id: string; name: string; icon: string; color: string }[];
+    relationships: {
+      id: string;
+      name: string;
+      from: string;
+      to: string;
+      cardinality: string;
+      kind?: 'association' | 'subclass';
+    }[];
+  };
   theme: ThemeId;
   onSelectEntity: (id: string | null) => void;
   onSelectRelationship: (id: string | null) => void;
@@ -58,13 +72,20 @@ interface GraphPreviewProps {
 function GraphPreview({ ontology, theme, onSelectEntity, onSelectRelationship }: GraphPreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
+  const largeGraph = isLargeOntologyGraph(ontology);
 
   const buildElements = useCallback(() => {
     const nodes = ontology.entityTypes.map((e) => ({
       data: { id: e.id, label: `${e.icon} ${e.name}`, color: e.color },
     }));
     const edges = ontology.relationships.map((r) => ({
-      data: { id: r.id, source: r.from, target: r.to, label: r.name },
+      data: {
+        id: r.id,
+        source: r.from,
+        target: r.to,
+        label: r.name,
+        kind: r.kind ?? 'association',
+      },
     }));
     return [...nodes, ...edges];
   }, [ontology]);
@@ -106,7 +127,7 @@ function GraphPreview({ ontology, theme, onSelectEntity, onSelectRelationship }:
         {
           selector: 'edge',
           style: {
-            label: 'data(label)',
+            label: largeGraph ? '' : 'data(label)',
             'font-size': '11px',
             'font-family': 'Segoe UI, sans-serif',
             color: themeColors.edgeText,
@@ -123,15 +144,28 @@ function GraphPreview({ ontology, theme, onSelectEntity, onSelectRelationship }:
             'curve-style': 'bezier',
           },
         },
+        {
+          selector: 'edge[kind = "subclass"]',
+          style: {
+            'line-style': 'dashed',
+          },
+        },
       ],
-      layout: {
-        name: ontology.entityTypes.length > 0 ? 'fcose' : 'grid',
-        animate: false,
-        fit: true,
-        padding: 40,
-        nodeDimensionsIncludeLabels: true,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any,
+      layout: (largeGraph
+        ? {
+            name: 'grid',
+            animate: false,
+            fit: true,
+            padding: 30,
+          }
+        : {
+            name: ontology.entityTypes.length > 0 ? 'fcose' : 'grid',
+            animate: false,
+            fit: true,
+            padding: 40,
+            nodeDimensionsIncludeLabels: true,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          }) as any,
       minZoom: 0.3,
       maxZoom: 3,
     });
@@ -148,7 +182,7 @@ function GraphPreview({ ontology, theme, onSelectEntity, onSelectRelationship }:
     cyRef.current = cy;
     return () => { cy.destroy(); cyRef.current = null; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [theme]); // Recreate on theme change to re-read CSS colors
+  }, [theme, largeGraph]); // Recreate on theme or scale strategy change
 
   // Incrementally sync nodes & edges without full relayout
   useEffect(() => {
@@ -179,7 +213,15 @@ function GraphPreview({ ontology, theme, onSelectEntity, onSelectRelationship }:
     const newEdges: { data: Record<string, string> }[] = [];
     for (const rel of ontology.relationships) {
       if (!currentEdgeIds.has(rel.id)) {
-        newEdges.push({ data: { id: rel.id, source: rel.from, target: rel.to, label: rel.name } });
+        newEdges.push({
+          data: {
+            id: rel.id,
+            source: rel.from,
+            target: rel.to,
+            label: rel.name,
+            kind: rel.kind ?? 'association',
+          },
+        });
       }
     }
 
@@ -214,6 +256,7 @@ function GraphPreview({ ontology, theme, onSelectEntity, onSelectRelationship }:
       const edge = cy.getElementById(rel.id);
       if (edge.length) {
         edge.data('label', rel.name);
+        edge.data('kind', rel.kind ?? 'association');
       }
     }
   }, [ontology]);
@@ -261,6 +304,13 @@ function RdfPreview({ ontology, onImported }: RdfPreviewProps) {
     }
     try {
       const { ontology: parsed } = parseRDF(trimmed);
+      if (isLargeOntologyGraph(parsed)) {
+        setImportError(
+          `This ontology contains ${ontologyGraphElementCount(parsed).toLocaleString()} graph elements, ` +
+          'which is too large for safe all-at-once editing. Import it in the main viewer instead.'
+        );
+        return;
+      }
       loadDraft(parsed);
       setImportMode(false);
       setImportText('');

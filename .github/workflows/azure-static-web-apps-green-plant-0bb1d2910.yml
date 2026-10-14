@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Build and Deploy Job
     steps:
-      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: true
           lfs: false
@@ -29,11 +29,15 @@ jobs:
           ###### Repository/Build Configurations - These values can be configured to match your app requirements. ######
           # For more information regarding Static Web App workflow configurations, please visit: https://aka.ms/swaworkflowconfig
           app_location: "/" # App source code path
-          api_location: "api" # Azure Functions API (GitHub OAuth proxy)
           output_location: "build" # Built app content directory - optional
+          # Static assets only. The optional api/ package is validated in CI
+          # and must be deployed separately by operators who choose to use it.
           ###### End of Repository/Build Configurations ######
         env:
+          VITE_ENABLE_AI_BUILDER: ${{ vars.VITE_ENABLE_AI_BUILDER || 'false' }}
           VITE_GITHUB_CLIENT_ID: ${{ secrets.VITE_GITHUB_CLIENT_ID }}
+          VITE_GITHUB_OAUTH_BASE: ${{ secrets.VITE_GITHUB_OAUTH_BASE }}
+          VITE_API_BASE: ${{ secrets.VITE_API_BASE }}
 
   close_pull_request_job:
     if: github.repository != 'microsoft/Ontology-Playground' && github.event_name == 'pull_request' && github.event.action == 'closed'

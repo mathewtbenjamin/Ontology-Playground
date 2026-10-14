@@ -11,8 +11,10 @@ Community users can submit ontologies to the catalogue via pull requests.
 
 > Scope note: this document covers the **embed widget** threat model. Learn
 > article markdown rendering (`/#/learn`) has a separate sanitization boundary
-> in the compile pipeline (`scripts/compile-learn.ts`) and is not part of the
-> embed runtime attack surface.
+> in the compile pipeline (`scripts/compile-learn.ts`). Learn embed IDs are
+> restricted to path-based catalogue IDs, revalidated at runtime, and rendered
+> with text-only DOM APIs when an error occurs. Article titles are also inserted
+> as text before presentation HTML is serialized.
 
 ## Data Flow
 

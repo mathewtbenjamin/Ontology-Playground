@@ -3,7 +3,10 @@ import { Download, AlertTriangle, CheckCircle, Upload, Github, FilePlus, Undo2, 
 import { useDesignerStore } from '../../store/designerStore';
 import type { ValidationError } from '../../store/designerStore';
 import { useAppStore } from '../../store/appStore';
-import { serializeToRDF } from '../../lib/rdf/serializer';
+import {
+  serializeToRDF,
+  type RdfExportProfile,
+} from '../../lib/rdf/serializer';
 import { navigate } from '../../lib/router';
 import { SubmitCatalogueModal } from './SubmitCatalogueModal';
 
@@ -14,6 +17,7 @@ export function DesignerToolbar() {
   const { ontology, validate, resetDraft, undo, redo, _past, _future } = useDesignerStore();
   const loadOntology = useAppStore((s) => s.loadOntology);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [rdfExportProfile, setRdfExportProfile] = useState<RdfExportProfile>('playground');
   const canUndo = _past.length > 0;
   const canRedo = _future.length > 0;
 
@@ -25,13 +29,14 @@ export function DesignerToolbar() {
     const errors = validate();
     // Allow download even with validation errors (user sees warnings in sidebar)
     try {
-      const rdf = serializeToRDF(ontology, []);
+      const rdf = serializeToRDF(ontology, [], { profile: rdfExportProfile });
       const blob = new Blob([rdf], { type: 'application/rdf+xml' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const suffix = errors.length > 0 ? '-draft' : '';
-      a.download = `${ontology.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'ontology'}${suffix}.rdf`;
+      const draftSuffix = errors.length > 0 ? '-draft' : '';
+      const profileSuffix = rdfExportProfile === 'standards' ? '-owl-shacl' : '';
+      a.download = `${ontology.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'ontology'}${draftSuffix}${profileSuffix}.rdf`;
       a.click();
       URL.revokeObjectURL(url);
     } catch {
@@ -73,6 +78,21 @@ export function DesignerToolbar() {
           <CheckCircle size={14} /> Validate
         </button>
         <div className="designer-toolbar-sep" />
+        <select
+          aria-label="RDF export profile"
+          className="designer-toolbar-select"
+          title="RDF export profile"
+          value={rdfExportProfile}
+          onChange={(event) => {
+            const profile = event.target.value;
+            if (profile === 'playground' || profile === 'standards') {
+              setRdfExportProfile(profile);
+            }
+          }}
+        >
+          <option value="playground">Playground round-trip</option>
+          <option value="standards">Standards-oriented OWL + SHACL</option>
+        </select>
         <button className="designer-toolbar-btn" onClick={handleExportRDF} title="Export RDF">
           <Download size={14} /> Export RDF
         </button>

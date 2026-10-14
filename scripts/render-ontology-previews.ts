@@ -5,13 +5,13 @@ import { chromium } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import type { OntologyPreviewManifest } from './list-changed-catalogue-entries.js';
 
-interface RenderedPreview {
+export interface RenderedPreview {
   id: string;
   file: string;
   bytes: number;
 }
 
-interface RenderedManifest extends OntologyPreviewManifest {
+export interface RenderedManifest extends OntologyPreviewManifest {
   renderedAt: string;
   previews: RenderedPreview[];
 }
@@ -58,14 +58,32 @@ async function gotoWithRetry(page: Page, url: string): Promise<void> {
   throw lastError;
 }
 
+export function writeRenderedManifest(
+  outputDir: string,
+  manifest: OntologyPreviewManifest,
+  previews: RenderedPreview[],
+): RenderedManifest {
+  const renderedManifest: RenderedManifest = {
+    ...manifest,
+    renderedAt: new Date().toISOString(),
+    previews,
+  };
+  mkdirSync(outputDir, { recursive: true });
+  writeFileSync(
+    join(outputDir, 'manifest.json'),
+    `${JSON.stringify(renderedManifest, null, 2)}\n`,
+    'utf-8',
+  );
+  return renderedManifest;
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const manifest = readManifest(options.manifest);
   mkdirSync(options.outputDir, { recursive: true });
 
   if (manifest.entries.length === 0) {
-    const renderedManifest: RenderedManifest = { ...manifest, renderedAt: new Date().toISOString(), previews: [] };
-    writeFileSync(join(options.outputDir, 'manifest.json'), JSON.stringify(renderedManifest, null, 2) + '\n', 'utf-8');
+    writeRenderedManifest(options.outputDir, manifest, []);
     console.log('No changed catalogue entries to render.');
     return;
   }
@@ -114,8 +132,7 @@ async function main() {
     await browser.close();
   }
 
-  const renderedManifest: RenderedManifest = { ...manifest, renderedAt: new Date().toISOString(), previews };
-  writeFileSync(join(options.outputDir, 'manifest.json'), JSON.stringify(renderedManifest, null, 2) + '\n', 'utf-8');
+  writeRenderedManifest(options.outputDir, manifest, previews);
   console.log(`Rendered ${previews.length} ontology preview${previews.length === 1 ? '' : 's'}.`);
 }
 

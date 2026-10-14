@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { X, FileText, Copy, Check } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { useState } from 'react';
+import { limitOntologyList } from '../lib/ontologyScale';
 
 interface OntologySummaryModalProps {
   onClose: () => void;
@@ -10,6 +11,8 @@ interface OntologySummaryModalProps {
 export function OntologySummaryModal({ onClose }: OntologySummaryModalProps) {
   const { currentOntology } = useAppStore();
   const [copied, setCopied] = useState(false);
+  const summaryEntities = limitOntologyList(currentOntology.entityTypes);
+  const summaryRelationships = limitOntologyList(currentOntology.relationships);
 
   const generateTextSummary = () => {
     const lines: string[] = [];
@@ -101,7 +104,7 @@ export function OntologySummaryModal({ onClose }: OntologySummaryModalProps) {
           <div className="summary-section">
             <h4>Entities ({currentOntology.entityTypes.length})</h4>
             <div className="summary-entities">
-              {currentOntology.entityTypes.map(entity => (
+              {summaryEntities.items.map(entity => (
                 <div key={entity.id} className="summary-entity-card">
                   <div className="entity-card-header">
                     <span className="entity-icon-large" style={{ background: entity.color }}>
@@ -123,13 +126,18 @@ export function OntologySummaryModal({ onClose }: OntologySummaryModalProps) {
                   </div>
                 </div>
               ))}
+              {summaryEntities.hiddenCount > 0 && (
+                <div className="summary-entity-card">
+                  {summaryEntities.hiddenCount} additional entity types are omitted from this preview.
+                </div>
+              )}
             </div>
           </div>
 
           <div className="summary-section">
             <h4>Relationships ({currentOntology.relationships.length})</h4>
             <div className="summary-relationships">
-              {currentOntology.relationships.map(rel => {
+              {summaryRelationships.items.map(rel => {
                 const fromEntity = currentOntology.entityTypes.find(e => e.id === rel.from);
                 const toEntity = currentOntology.entityTypes.find(e => e.id === rel.to);
                 return (
@@ -149,6 +157,11 @@ export function OntologySummaryModal({ onClose }: OntologySummaryModalProps) {
                   </div>
                 );
               })}
+              {summaryRelationships.hiddenCount > 0 && (
+                <div className="summary-relationship-card">
+                  {summaryRelationships.hiddenCount} additional relationships are omitted from this preview.
+                </div>
+              )}
             </div>
           </div>
         </div>

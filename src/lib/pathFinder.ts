@@ -15,10 +15,11 @@ export function findShortestPath(
 ): PathNode[] | null {
   if (fromId === toId) return null;
 
-  const adjacency: Record<string, { neighbourId: string; rel: Relationship }[]> = {};
+  const adjacency = new Map<string, { neighbourId: string; rel: Relationship }[]>();
   for (const rel of relationships) {
-    if (!adjacency[rel.from]) adjacency[rel.from] = [];
-    adjacency[rel.from].push({ neighbourId: rel.to, rel });
+    const neighbours = adjacency.get(rel.from) ?? [];
+    neighbours.push({ neighbourId: rel.to, rel });
+    adjacency.set(rel.from, neighbours);
   }
 
   const visited = new Set<string>([fromId]);
@@ -30,7 +31,7 @@ export function findShortestPath(
     const current = queue.shift();
     if (!current) break;
 
-    for (const { neighbourId, rel } of adjacency[current.entityId] ?? []) {
+    for (const { neighbourId, rel } of adjacency.get(current.entityId) ?? []) {
       if (visited.has(neighbourId)) continue;
 
       visited.add(neighbourId);

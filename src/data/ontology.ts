@@ -14,12 +14,15 @@ export interface RelationshipAttribute {
   type: string;
 }
 
+export type RelationshipKind = 'association' | 'subclass';
+
 export interface Relationship {
   id: string;
   name: string;
   from: string;
   to: string;
   cardinality: 'one-to-one' | 'one-to-many' | 'many-to-one' | 'many-to-many';
+  kind?: RelationshipKind;
   description?: string;
   attributes?: RelationshipAttribute[];
 }

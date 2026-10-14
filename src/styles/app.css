@@ -758,6 +758,20 @@ body {
   background: rgba(255,255,255,0.35);
 }
 
+.graph-scale-badge {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  padding: 6px 10px;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: 11px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
 .graph-legend {
   position: absolute;
   bottom: 24px;
@@ -767,6 +781,8 @@ body {
   border-radius: var(--radius-lg);
   padding: 16px;
   min-width: 180px;
+  max-height: 40vh;
+  overflow-y: auto;
 }
 
 .legend-title {
@@ -2572,6 +2588,15 @@ body {
   opacity: 0.35;
   cursor: default;
   pointer-events: none;
+}
+.designer-toolbar-select {
+  max-width: 190px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 12px;
 }
 .designer-toolbar-btn.submit {
   background: #24292e;

@@ -26,6 +26,12 @@ This document contains guidelines for AI coding assistants working on this proje
 - Test changes locally (`npm run dev`)
 - Ensure no TypeScript errors
 - Review the diff for unintended changes
+- After implementing and locally validating an issue fix, launch a separate
+  read-only `code-review` agent to red-team the complete branch diff against the
+  issue's acceptance criteria. Use a reviewer model different from the
+  implementation model when the runtime supports model selection. Fix all
+  high-confidence findings, rerun affected checks, and request a follow-up from
+  the same reviewer before considering the issue complete.
 - **Update documentation** — if the change adds, removes, or modifies user-visible
   features, update `README.md` (feature descriptions, route table, env vars) and
   any relevant guides in `docs/` before merging. Also update `TODO.md` to mark

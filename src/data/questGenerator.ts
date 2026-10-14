@@ -85,15 +85,25 @@ export function generateQuestsForOntology(ontology: Ontology): Quest[] {
   }
 
   // Quest 3: Find the Hub - identify the most connected entity
-  const connectionCount: Record<string, number> = {};
+  const connectionCount = new Map<string, number>();
   for (const entity of entities) {
-    connectionCount[entity.id] = relationships.filter(
-      r => r.from === entity.id || r.to === entity.id
-    ).length;
+    connectionCount.set(entity.id, 0);
+  }
+  for (const relationship of relationships) {
+    connectionCount.set(
+      relationship.from,
+      (connectionCount.get(relationship.from) ?? 0) + 1,
+    );
+    if (relationship.to !== relationship.from) {
+      connectionCount.set(
+        relationship.to,
+        (connectionCount.get(relationship.to) ?? 0) + 1,
+      );
+    }
   }
   
   const sortedByConnections = entities
-    .map(e => ({ entity: e, connections: connectionCount[e.id] || 0 }))
+    .map(e => ({ entity: e, connections: connectionCount.get(e.id) ?? 0 }))
     .sort((a, b) => b.connections - a.connections);
 
   if (sortedByConnections.length >= 2 && sortedByConnections[0].connections >= 2) {
@@ -108,7 +118,7 @@ export function generateQuestsForOntology(ontology: Ontology): Quest[] {
         instruction: `Find the ${hub.name} entity - it's the most connected in this ontology!`,
         targetType: 'entity',
         targetId: hub.id,
-        hint: `${hub.name} has ${connectionCount[hub.id]} connections`
+        hint: `${hub.name} has ${connectionCount.get(hub.id) ?? 0} connections`
       }
     ];
 

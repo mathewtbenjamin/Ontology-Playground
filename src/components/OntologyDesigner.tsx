@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { useDesignerStore } from '../store/designerStore';
 import { useAppStore, themeClass } from '../store/appStore';
@@ -6,6 +6,10 @@ import { navigate } from '../lib/router';
 import { EntityForm, RelationshipForm, DesignerPreview, DesignerToolbar, DesignerValidation, TemplatePicker } from './designer';
 import type { Catalogue } from '../types/catalogue';
 import type { Route } from '../lib/router';
+import {
+  isLargeOntologyGraph,
+  ontologyGraphElementCount,
+} from '../lib/ontologyScale';
 
 interface OntologyDesignerProps {
   route: Route & { page: 'designer' };
@@ -15,6 +19,7 @@ export function OntologyDesigner({ route }: OntologyDesignerProps) {
   const { ontology, setOntologyName, setOntologyDescription, loadDraft, undo, redo } = useDesignerStore();
   const theme = useAppStore((s) => s.theme);
   const isEmpty = ontology.entityTypes.length === 0 && ontology.relationships.length === 0;
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Keyboard shortcuts: Cmd/Ctrl+Z → undo, Cmd/Ctrl+Shift+Z → redo
   useEffect(() => {
@@ -44,11 +49,21 @@ export function OntologyDesigner({ route }: OntologyDesignerProps) {
       .then((data) => {
         const entry = data.entries.find((e) => e.id === id);
         if (entry) {
+          if (isLargeOntologyGraph(entry.ontology)) {
+            setLoadError(
+              `${entry.name} contains ${ontologyGraphElementCount(entry.ontology).toLocaleString()} graph elements, ` +
+              'which is too large for safe all-at-once editing. Open it in the catalogue viewer instead.'
+            );
+            return;
+          }
+          setLoadError(null);
           loadDraft(entry.ontology);
+        } else {
+          setLoadError(`Catalogue ontology "${id}" was not found.`);
         }
       })
-      .catch(() => {
-        // silently stay with current draft
+      .catch((error: unknown) => {
+        setLoadError(error instanceof Error ? error.message : 'Failed to load catalogue ontology.');
       });
   }, [route.ontologyId, loadDraft]);
 
@@ -77,6 +92,7 @@ export function OntologyDesigner({ route }: OntologyDesignerProps) {
         </div>
         <DesignerToolbar />
       </div>
+      {loadError && <div className="designer-import-error">{loadError}</div>}
 
       {/* Split pane */}
       <div className="designer-split">

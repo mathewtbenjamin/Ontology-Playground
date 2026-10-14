@@ -4,6 +4,10 @@ import fcose from 'cytoscape-fcose';
 import type { Core, EventObject, LayoutOptions } from 'cytoscape';
 import { useAppStore } from '../store/appStore';
 import { ZoomIn, ZoomOut, Maximize2, RotateCcw, Download, Crosshair } from 'lucide-react';
+import {
+  isLargeOntologyGraph,
+  limitOntologyList,
+} from '../lib/ontologyScale';
 
 // Register fcose layout
 cytoscape.use(fcose);
@@ -67,6 +71,8 @@ export function OntologyGraph() {
     darkMode,
     theme
   } = useAppStore();
+  const largeGraph = isLargeOntologyGraph(currentOntology);
+  const legendEntities = limitOntologyList(currentOntology.entityTypes);
 
   // Use refs for quest state to avoid re-creating the graph when quest changes
   const activeQuestRef = useRef(activeQuest);
@@ -116,6 +122,7 @@ export function OntologyGraph() {
           label: rel.name,
           cardinality: rel.cardinality,
           description: rel.description,
+          kind: rel.kind ?? 'association',
           type: 'relationship'
         }
       }));
@@ -184,7 +191,7 @@ export function OntologyGraph() {
         {
           selector: 'edge',
           style: {
-            'label': 'data(label)',
+            'label': largeGraph ? '' : 'data(label)',
             'font-size': '11px',
             'font-family': 'Segoe UI, sans-serif',
             'color': initialThemeColors.current.edgeText,
@@ -205,6 +212,12 @@ export function OntologyGraph() {
             'edge-distances': 'node-position',
             'transition-property': 'width, line-color, target-arrow-color',
             'transition-duration': 200
+          }
+        },
+        {
+          selector: 'edge[kind = "subclass"]',
+          style: {
+            'line-style': 'dashed',
           }
         },
         // Selected edge
@@ -236,26 +249,33 @@ export function OntologyGraph() {
         }
       ],
        
-      layout: {
-        name: 'fcose',
-        quality: 'proof',
-        randomize: false,
-        animate: false,
-        fit: true,
-        padding: 60,
-        nodeDimensionsIncludeLabels: true,
-        nodeRepulsion: () => 15000,
-        idealEdgeLength: () => 200,
-        edgeElasticity: () => 0.45,
-        nestingFactor: 0.1,
-        gravity: 0.25,
-        gravityRange: 3.8,
-        numIter: 2500,
-        tile: true,
-        tilingPaddingVertical: 40,
-        tilingPaddingHorizontal: 40,
-        nodeSeparation: 100
-      } as LayoutOptions,
+      layout: (largeGraph
+        ? {
+            name: 'grid',
+            animate: false,
+            fit: true,
+            padding: 30,
+          }
+        : {
+            name: 'fcose',
+            quality: 'proof',
+            randomize: false,
+            animate: false,
+            fit: true,
+            padding: 60,
+            nodeDimensionsIncludeLabels: true,
+            nodeRepulsion: () => 15000,
+            idealEdgeLength: () => 200,
+            edgeElasticity: () => 0.45,
+            nestingFactor: 0.1,
+            gravity: 0.25,
+            gravityRange: 3.8,
+            numIter: 2500,
+            tile: true,
+            tilingPaddingVertical: 40,
+            tilingPaddingHorizontal: 40,
+            nodeSeparation: 100
+          }) as LayoutOptions,
       minZoom: 0.3,
       maxZoom: 3
     });
@@ -328,21 +348,21 @@ export function OntologyGraph() {
     window.__ONTOLOGY_PREVIEW_CY__ = cy;
     mountedRef.current = true;
 
-    // Run layout explicitly after initialization for better results
-     
-    cy.layout({
-      name: 'fcose',
-      quality: 'proof',
-      randomize: true,
-      animate: false,
-      fit: true,
-      padding: 60,
-      nodeDimensionsIncludeLabels: true,
-      nodeRepulsion: () => 15000,
-      idealEdgeLength: () => 200,
-      edgeElasticity: () => 0.45,
-      nodeSeparation: 100
-    } as unknown as Parameters<Core['layout']>[0]).run();
+    if (!largeGraph) {
+      cy.layout({
+        name: 'fcose',
+        quality: 'proof',
+        randomize: true,
+        animate: false,
+        fit: true,
+        padding: 60,
+        nodeDimensionsIncludeLabels: true,
+        nodeRepulsion: () => 15000,
+        idealEdgeLength: () => 200,
+        edgeElasticity: () => 0.45,
+        nodeSeparation: 100
+      } as unknown as Parameters<Core['layout']>[0]).run();
+    }
 
     return () => {
       mountedRef.current = false;
@@ -352,7 +372,7 @@ export function OntologyGraph() {
       cy.destroy();
       cyRef.current = null;
     };
-  }, [buildElements, selectEntity, selectRelationship]);
+  }, [buildElements, getCy, largeGraph, selectEntity, selectRelationship]);
 
   // Keep focusNodeIdRef in sync with state
   useEffect(() => {
@@ -505,19 +525,26 @@ export function OntologyGraph() {
     if (cy) {
       try {
          
-        cy.layout({
-          name: 'fcose',
-          quality: 'proof',
-          randomize: true,
-          animate: true,
-          animationDuration: 500,
-          fit: true,
-          padding: 60,
-          nodeDimensionsIncludeLabels: true,
-          nodeRepulsion: () => 15000,
-          idealEdgeLength: () => 200,
-          nodeSeparation: 100
-        } as unknown as Parameters<Core['layout']>[0]).run();
+        cy.layout((largeGraph
+          ? {
+              name: 'grid',
+              animate: false,
+              fit: true,
+              padding: 30,
+            }
+          : {
+              name: 'fcose',
+              quality: 'proof',
+              randomize: true,
+              animate: true,
+              animationDuration: 500,
+              fit: true,
+              padding: 60,
+              nodeDimensionsIncludeLabels: true,
+              nodeRepulsion: () => 15000,
+              idealEdgeLength: () => 200,
+              nodeSeparation: 100
+            }) as unknown as Parameters<Core['layout']>[0]).run();
       } catch { /* ignore */ }
     }
   };
@@ -540,6 +567,12 @@ export function OntologyGraph() {
   return (
     <div className="graph-container">
       <div ref={containerRef} className="graph-canvas" data-testid="ontology-graph-canvas" />
+
+      {largeGraph && (
+        <div className="graph-scale-badge">
+          Large ontology: using the fast grid layout
+        </div>
+      )}
 
       {focusNodeId && (
         <div className="graph-focus-badge">
@@ -578,12 +611,17 @@ export function OntologyGraph() {
 
       <div className="graph-legend">
         <div className="legend-title">Entity Types</div>
-        {currentOntology.entityTypes.map(entity => (
+        {legendEntities.items.map(entity => (
           <div key={entity.id} className="legend-item">
             <div className="legend-dot" style={{ backgroundColor: entity.color }} />
             <span>{entity.icon} {entity.name}</span>
           </div>
         ))}
+        {legendEntities.hiddenCount > 0 && (
+          <div className="legend-item">
+            <span>+ {legendEntities.hiddenCount} more — use Search &amp; Filter</span>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -92,4 +92,12 @@ describe('findShortestPath', () => {
 
     expect(path).toBeNull();
   });
+
+  it('handles entity IDs that match object prototype property names', () => {
+    const path = findShortestPath('__proto__', 'constructor', [
+      rel('prototype-path', '__proto__', 'constructor'),
+    ]);
+
+    expect(path?.map((node) => node.entityId)).toEqual(['__proto__', 'constructor']);
+  });
 });

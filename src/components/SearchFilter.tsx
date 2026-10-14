@@ -2,6 +2,10 @@ import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Filter, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
+import {
+  LARGE_ONTOLOGY_LIST_LIMIT,
+  limitOntologyList,
+} from '../lib/ontologyScale';
 
 export function SearchFilter() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -39,6 +43,13 @@ export function SearchFilter() {
     return { entities, relationships };
   }, [searchQuery, currentOntology]);
 
+  const hasQuery = searchQuery.trim().length > 0;
+  const entityResults = hasQuery ? filteredResults.entities : currentOntology.entityTypes;
+  const relationshipResults = hasQuery
+    ? filteredResults.relationships
+    : currentOntology.relationships;
+  const visibleEntities = limitOntologyList(entityResults);
+  const visibleRelationships = limitOntologyList(relationshipResults);
   const hasResults = filteredResults.entities.length > 0 || filteredResults.relationships.length > 0;
 
   const handleEntityClick = (entityId: string) => {
@@ -182,7 +193,7 @@ export function SearchFilter() {
 
             {/* Results or Quick Access */}
             <div style={{ maxHeight: 200, overflowY: 'auto' }} tabIndex={0} aria-label="Search results">
-              {searchQuery && !hasResults && (
+              {hasQuery && !hasResults && (
                 <div style={{ 
                   padding: 12, 
                   textAlign: 'center', 
@@ -193,8 +204,19 @@ export function SearchFilter() {
                 </div>
               )}
 
+              {(visibleEntities.hiddenCount > 0 || visibleRelationships.hiddenCount > 0) && (
+                <div style={{
+                  padding: '6px 10px',
+                  marginBottom: 6,
+                  color: 'var(--text-tertiary)',
+                  fontSize: 10,
+                }}>
+                  Showing the first {LARGE_ONTOLOGY_LIST_LIMIT} matches. Refine your search to narrow the list.
+                </div>
+              )}
+
               {/* Entity results */}
-              {showEntities && (searchQuery ? filteredResults.entities : currentOntology.entityTypes).map(entity => (
+              {showEntities && visibleEntities.items.map(entity => (
                 <motion.div
                   key={entity.id}
                   onClick={() => handleEntityClick(entity.id)}
@@ -229,7 +251,7 @@ export function SearchFilter() {
               ))}
 
               {/* Relationship results */}
-              {showRelationships && (searchQuery ? filteredResults.relationships : currentOntology.relationships).map(rel => (
+              {showRelationships && visibleRelationships.items.map(rel => (
                 <motion.div
                   key={rel.id}
                   onClick={() => handleRelationshipClick(rel.id)}

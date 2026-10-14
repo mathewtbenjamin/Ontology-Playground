@@ -69,6 +69,9 @@ const fakeCatalogue: Catalogue = {
       tags: ['health', 'hospital'],
       author: 'Dr. Smith',
       source: 'community',
+      license: 'MIT',
+      sourceUrl: 'https://example.com/hospital-network',
+      version: '1.2.0',
       ontology: makeOntology('Hospital Network', 4, 3),
       bindings: [],
     },
@@ -172,6 +175,23 @@ describe('GalleryModal', () => {
     expect(screen.getByText('Finance Ledger')).toBeTruthy();
   });
 
+  it('filters entries by license', async () => {
+    mockFetchSuccess();
+    const user = userEvent.setup();
+    render(<GalleryModal onClose={onClose} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Fourth Coffee')).toBeTruthy();
+    });
+
+    const searchInput = screen.getByPlaceholderText(/Search by name/);
+    await user.type(searchInput, 'MIT');
+
+    expect(screen.queryByText('Fourth Coffee')).toBeNull();
+    expect(screen.getByText('Hospital Network')).toBeTruthy();
+    expect(screen.queryByText('Finance Ledger')).toBeNull();
+  });
+
   it('filters by category', async () => {
     mockFetchSuccess();
     const user = userEvent.setup();
@@ -259,6 +279,25 @@ describe('GalleryModal', () => {
     // The badge is a <span> inside a card, the option is in a <select>
     const badges = allCommunity.filter((el) => el.tagName !== 'OPTION');
     expect(badges).toHaveLength(1);
+  });
+
+  it('shows license, version, and a safe upstream source link', async () => {
+    mockFetchSuccess();
+    render(<GalleryModal onClose={onClose} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Hospital Network')).toBeTruthy();
+    });
+
+    expect(screen.getByText('License: MIT')).toBeTruthy();
+    expect(screen.getByText('Version: 1.2.0')).toBeTruthy();
+
+    const sourceLink = screen.getByRole('link', {
+      name: 'View upstream source for Hospital Network',
+    });
+    expect(sourceLink.getAttribute('href')).toBe('https://example.com/hospital-network');
+    expect(sourceLink.getAttribute('target')).toBe('_blank');
+    expect(sourceLink.getAttribute('rel')).toBe('noopener noreferrer');
   });
 
   it('displays entity and relationship counts', async () => {

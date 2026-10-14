@@ -9,6 +9,9 @@ export interface CatalogueEntry {
   tags: string[];
   author: string;
   source: 'official' | 'community' | 'external';
+  license?: string;
+  sourceUrl?: string;
+  version?: string;
   ontology: Ontology;
   bindings: DataBinding[];
 }

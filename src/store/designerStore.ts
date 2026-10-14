@@ -103,15 +103,18 @@ export function validateOntology(ontology: Ontology): ValidationError[] {
     }
   }
 
-  const relIds = new Set<string>();
+  const graphElementIds = new Set(entityIds);
   for (const r of ontology.relationships) {
     const label = r.name || 'Unnamed relationship';
     if (!r.id) {
       errors.push({ message: `"${label}" is missing an internal ID.`, relationshipId: r.id });
-    } else if (relIds.has(r.id)) {
-      errors.push({ message: `Two relationships share the same ID "${r.id}". Rename one of them.`, relationshipId: r.id });
+    } else if (graphElementIds.has(r.id)) {
+      const message = entityIds.has(r.id)
+        ? `An entity and relationship share the same ID "${r.id}". IDs must be unique across the designer graph.`
+        : `Two relationships share the same ID "${r.id}". Rename one of them.`;
+      errors.push({ message, relationshipId: r.id });
     } else {
-      relIds.add(r.id);
+      graphElementIds.add(r.id);
     }
     if (!entityIds.has(r.from)) {
       const fromLabel = r.from || '(none)';
@@ -145,12 +148,27 @@ function slugify(name: string): string {
 let entityCounter = 0;
 let relationshipCounter = 0;
 
-function nextEntityId(name: string): string {
-  return `${slugify(name)}-${++entityCounter}`;
+function nextEntityId(name: string, existingIds: ReadonlySet<string>): string {
+  let id: string;
+  do {
+    id = `${slugify(name)}-${++entityCounter}`;
+  } while (existingIds.has(id));
+  return id;
 }
 
-function nextRelationshipId(name: string): string {
-  return `rel-${slugify(name)}-${++relationshipCounter}`;
+function nextRelationshipId(name: string, existingIds: ReadonlySet<string>): string {
+  let id: string;
+  do {
+    id = `rel-${slugify(name)}-${++relationshipCounter}`;
+  } while (existingIds.has(id));
+  return id;
+}
+
+function graphElementIds(ontology: Ontology): Set<string> {
+  return new Set([
+    ...ontology.entityTypes.map((entity) => entity.id),
+    ...ontology.relationships.map((relationship) => relationship.id),
+  ]);
 }
 
 // ─── Default palette ─────────────────────────────────────────────────────────
@@ -255,10 +273,12 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
   // ─ Entities ─────────────────────────────────────────────────────────────
   addEntity: () => {
     const name = 'New Entity';
-    const colorIdx = get().ontology.entityTypes.length % ENTITY_COLORS.length;
-    const iconIdx = get().ontology.entityTypes.length % ENTITY_ICONS.length;
+    const ontology = get().ontology;
+    const entityTypes = ontology.entityTypes;
+    const colorIdx = entityTypes.length % ENTITY_COLORS.length;
+    const iconIdx = entityTypes.length % ENTITY_ICONS.length;
     const entity: EntityType = {
-      id: nextEntityId(name),
+      id: nextEntityId(name, graphElementIds(ontology)),
       name,
       description: '',
       icon: ENTITY_ICONS[iconIdx],
@@ -362,8 +382,12 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
 
   // ─ Relationships ────────────────────────────────────────────────────────
   addRelationship: (from, to) => {
+    const ontology = get().ontology;
     const rel: Relationship = {
-      id: nextRelationshipId('relates-to'),
+      id: nextRelationshipId(
+        'relates-to',
+        graphElementIds(ontology),
+      ),
       name: 'relates_to',
       from,
       to,

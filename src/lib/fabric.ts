@@ -197,6 +197,7 @@ export function convertToFabricParts(ontology: Ontology): ConversionResult {
 
   // Relationship Types
   for (const rel of ontology.relationships) {
+    if (rel.kind === 'subclass') continue;
     const fabricRelId = generateFabricId();
     const sourceEntityId = entityIdMap.get(rel.from);
     const targetEntityId = entityIdMap.get(rel.to);

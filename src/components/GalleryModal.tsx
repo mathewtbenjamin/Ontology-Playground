@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Layers, ArrowRight, Search, Code, User, Pencil, Share2 } from 'lucide-react';
+import { X, Layers, ArrowRight, Search, Code, User, Pencil, Share2, ExternalLink, Scale } from 'lucide-react';
 import { useDesignerStore } from '../store/designerStore';
 import { useAppStore } from '../store/appStore';
 import { serializeToRDF } from '../lib/rdf/serializer';
 import { highlightRdf, RDF_HIGHLIGHT_DARK, RDF_HIGHLIGHT_LIGHT } from '../lib/rdf/highlighter';
 import { navigate, parseHash } from '../lib/router';
+import { buildOntologyEmbedSnippet } from '../lib/contentSafety';
 import type { CatalogueEntry, Catalogue } from '../types/catalogue';
 import { CATEGORY_COLORS, CATEGORY_LABELS } from '../types/catalogue';
 
@@ -79,6 +80,8 @@ export function GalleryModal({ onClose }: GalleryModalProps) {
           entry.name,
           entry.description,
           entry.author,
+          entry.license ?? '',
+          entry.version ?? '',
           ...entry.tags,
         ]
           .join(' ')
@@ -118,7 +121,7 @@ export function GalleryModal({ onClose }: GalleryModalProps) {
 
   const handleCopyEmbed = (entry: CatalogueEntry) => {
     const siteUrl = window.location.origin + (import.meta.env.BASE_URL || '/');
-    const snippet = `<div class="ontology-embed" data-catalogue-id="${entry.id}" data-catalogue-base-url="${siteUrl}" data-theme="dark" data-height="500px"></div>\n<script src="${siteUrl}embed/ontology-embed.js"></script>`;
+    const snippet = buildOntologyEmbedSnippet(entry.id, siteUrl);
     navigator.clipboard.writeText(snippet).then(() => {
       setCopiedEmbedId(entry.id);
       setTimeout(() => setCopiedEmbedId(null), 2000);
@@ -160,7 +163,7 @@ export function GalleryModal({ onClose }: GalleryModalProps) {
             <Search size={16} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
             <input
               type="text"
-              placeholder="Search by name, tag, author…"
+              placeholder="Search by name, tag, author, license…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
@@ -383,11 +386,20 @@ export function GalleryModal({ onClose }: GalleryModalProps) {
 
                   {/* Author */}
                   {entry.author && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 12 }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        marginBottom: entry.license || entry.sourceUrl || entry.version ? 6 : 12,
+                      }}
+                    >
                       <User size={12} color="var(--text-tertiary)" />
                       <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{entry.author}</span>
                     </div>
                   )}
+
+                  <CatalogueAttribution entry={entry} />
 
                   {/* Stats + actions */}
                   <div
@@ -550,6 +562,51 @@ export function GalleryModal({ onClose }: GalleryModalProps) {
         </div>
       </motion.div>
     </motion.div>
+  );
+}
+
+function CatalogueAttribution({ entry }: { entry: CatalogueEntry }) {
+  if (!entry.license && !entry.sourceUrl && !entry.version) return null;
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        flexWrap: 'wrap',
+        marginBottom: 12,
+        fontSize: 11,
+        color: 'var(--text-tertiary)',
+      }}
+    >
+      {entry.license && (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <Scale size={12} aria-hidden="true" />
+          License: {entry.license}
+        </span>
+      )}
+      {entry.version && <span>Version: {entry.version}</span>}
+      {entry.sourceUrl && (
+        <a
+          href={entry.sourceUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`View upstream source for ${entry.name}`}
+          onClick={(event) => event.stopPropagation()}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 3,
+            color: 'var(--ms-blue, #0078D4)',
+            textDecoration: 'underline',
+          }}
+        >
+          Upstream source
+          <ExternalLink size={11} aria-hidden="true" />
+        </a>
+      )}
+    </div>
   );
 }
 

@@ -48,8 +48,10 @@ Tip for demos: Start from an existing ontology in Catalogue and click Edit in De
 ## Step 2: Export RDF
 
 1. In the app, open Import / Export.
-2. Export as RDF/XML.
-3. Save the file as:
+2. Select **Playground round-trip** so catalogue submissions retain icons,
+   colors, relationship metadata, and other editable Playground fields.
+3. Export as RDF/XML.
+4. Save the file as:
 
 ```text
 ontology.rdf

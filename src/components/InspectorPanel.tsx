@@ -1,6 +1,7 @@
 import { useRef, useEffect } from 'react';
 import { useAppStore } from '../store/appStore';
 import { Database, ArrowRight, Key, Link2, Layers, Box, GitBranch } from 'lucide-react';
+import { limitOntologyList } from '../lib/ontologyScale';
 
 export function InspectorPanel() {
   const { currentOntology, dataBindings, selectedEntityId, selectedRelationshipId, showDataBindings, activeQuest, currentStepIndex, advanceQuestStep } = useAppStore();
@@ -47,7 +48,9 @@ export function InspectorPanel() {
     return (
       <div ref={panelRef} className="inspector-panel">
         <div className="panel-header">
-          <h3 className="panel-title">Relationship</h3>
+          <h3 className="panel-title">
+            {relationship.kind === 'subclass' ? 'Class Hierarchy' : 'Relationship'}
+          </h3>
         </div>
         <div className="inspector-content">
           <div className="relationship-header">
@@ -78,9 +81,11 @@ export function InspectorPanel() {
           <div className="inspector-section">
             <div className="section-title">
               <Layers size={14} />
-              Cardinality
+              {relationship.kind === 'subclass' ? 'RDF semantics' : 'Cardinality'}
             </div>
-            <div className="cardinality-badge">{relationship.cardinality}</div>
+            <div className="cardinality-badge">
+              {relationship.kind === 'subclass' ? 'rdfs:subClassOf' : relationship.cardinality}
+            </div>
           </div>
 
           {relationship.attributes && relationship.attributes.length > 0 && (
@@ -113,6 +118,7 @@ export function InspectorPanel() {
   const entityRelationships = currentOntology.relationships.filter(
     r => r.from === selectedEntityId || r.to === selectedEntityId
   );
+  const visibleEntityRelationships = limitOntologyList(entityRelationships);
 
   return (
     <div ref={panelRef} className="inspector-panel">
@@ -155,7 +161,7 @@ export function InspectorPanel() {
             Relationships ({entityRelationships.length})
           </div>
           <div className="property-list">
-            {entityRelationships.map(rel => {
+            {visibleEntityRelationships.items.map(rel => {
               const isOutgoing = rel.from === selectedEntityId;
               const otherEntityId = isOutgoing ? rel.to : rel.from;
               const otherEntity = currentOntology.entityTypes.find(e => e.id === otherEntityId);
@@ -181,6 +187,13 @@ export function InspectorPanel() {
                 </div>
               );
             })}
+            {visibleEntityRelationships.hiddenCount > 0 && (
+              <div className="property-item">
+                <span className="property-name">
+                  {visibleEntityRelationships.hiddenCount} additional relationships omitted
+                </span>
+              </div>
+            )}
           </div>
         </div>
 

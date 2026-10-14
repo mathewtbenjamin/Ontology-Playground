@@ -49,6 +49,7 @@ function expectOntologiesEqual(actual: Ontology, expected: Ontology) {
     expect(ar.from).toBe(er.from);
     expect(ar.to).toBe(er.to);
     expect(ar.cardinality).toBe(er.cardinality);
+    expect(ar.kind ?? 'association').toBe(er.kind ?? 'association');
     if (er.description) {
       expect(ar.description).toBe(er.description);
     }
@@ -152,6 +153,33 @@ describe('RDF round-trip tests', () => {
     expectOntologiesEqual(parsed, ontology);
   });
 
+  it('round-trips subclass relationships without converting them to object properties', () => {
+    const ontology: Ontology = {
+      name: 'Hierarchy Test',
+      description: 'Tests class hierarchy fidelity',
+      entityTypes: [
+        { id: 'parent', name: 'Parent', description: '', icon: '📦', color: '#111', properties: [] },
+        { id: 'child', name: 'Child', description: '', icon: '📦', color: '#222', properties: [] },
+      ],
+      relationships: [
+        {
+          id: 'child-subClassOf-parent',
+          name: 'subClassOf',
+          from: 'child',
+          to: 'parent',
+          cardinality: 'many-to-one',
+          kind: 'subclass',
+        },
+      ],
+    };
+    const rdf = serializeToRDF(ontology);
+    expect(rdf).toContain('<rdfs:subClassOf rdf:resource="http://example.org/ontology/hierarchy-test/Parent"/>');
+    expect(rdf).not.toContain('<owl:ObjectProperty');
+
+    const { ontology: parsed } = parseRDF(rdf);
+    expectOntologiesEqual(parsed, ontology);
+  });
+
   it('round-trips an empty ontology', () => {
     const ontology: Ontology = {
       name: 'Empty',
@@ -193,5 +221,104 @@ describe('RDF round-trip tests', () => {
     expect(parsed.entityTypes[0].properties[0].description).toBe(
       ontology.entityTypes[0].properties[0].description,
     );
+  });
+
+  it('round-trips standard OWL and SHACL semantics after statement reordering', () => {
+    const ontology: Ontology = {
+      name: 'Interoperability',
+      description: 'Tests the standards-oriented export profile',
+      entityTypes: [
+        {
+          id: 'person',
+          name: 'Person',
+          description: 'A person',
+          icon: '📦',
+          color: '#0078D4',
+          properties: [
+            { name: 'personId', type: 'string', isIdentifier: true },
+            { name: 'status', type: 'enum', values: ['Active', 'Inactive'] },
+            { name: 'displayName', type: 'string' },
+          ],
+        },
+        {
+          id: 'team',
+          name: 'Team',
+          description: 'A team',
+          icon: '📦',
+          color: '#0078D4',
+          properties: [],
+        },
+        {
+          id: 'office',
+          name: 'Office',
+          description: 'An office',
+          icon: '📦',
+          color: '#0078D4',
+          properties: [],
+        },
+      ],
+      relationships: [
+        {
+          id: 'person_member_of_team',
+          name: 'related to',
+          from: 'person',
+          to: 'team',
+          cardinality: 'many-to-one',
+          attributes: [
+            { name: 'role', type: 'string' },
+            { name: 'since', type: 'date' },
+          ],
+        },
+        {
+          id: 'person_assigned_office',
+          name: 'related to',
+          from: 'person',
+          to: 'office',
+          cardinality: 'one-to-one',
+        },
+        {
+          id: 'team_has_person',
+          name: 'contains',
+          from: 'team',
+          to: 'person',
+          cardinality: 'one-to-many',
+        },
+        {
+          id: 'team_collaborates_office',
+          name: 'collaborates with',
+          from: 'team',
+          to: 'office',
+          cardinality: 'many-to-many',
+        },
+      ],
+    };
+
+    const rdf = serializeToRDF(ontology, [], { profile: 'standards' });
+    const document = new DOMParser().parseFromString(rdf, 'application/xml');
+    const elements = Array.from(document.querySelectorAll('*'));
+    for (const element of elements) {
+      const children = Array.from(element.children);
+      children.reverse().forEach((child) => element.appendChild(child));
+    }
+    const reordered = new XMLSerializer().serializeToString(document);
+
+    const { ontology: parsed } = parseRDF(reordered);
+    const normalizeResourceOrder = (value: Ontology): Ontology => ({
+      ...value,
+      entityTypes: [...value.entityTypes].sort((left, right) => (
+        left.id.localeCompare(right.id)
+      )),
+      relationships: [...value.relationships].sort((left, right) => (
+        left.id.localeCompare(right.id)
+      )),
+    });
+
+    expectOntologiesEqual(
+      normalizeResourceOrder(parsed),
+      normalizeResourceOrder(ontology),
+    );
+    expect(parsed.relationships.filter((relationship) => (
+      relationship.name === 'related to'
+    ))).toHaveLength(2);
   });
 });

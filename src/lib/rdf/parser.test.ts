@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { parseRDF, RDFParseError } from './parser';
 
+const RDF_NS = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
+const XSD_NS = 'http://www.w3.org/2001/XMLSchema#';
+
 describe('parseRDF', () => {
   const minimalRdf = `<?xml version="1.0" encoding="UTF-8"?>
 <rdf:RDF
@@ -405,6 +408,470 @@ describe('parseRDF', () => {
       expect(ontology.name).toBe('Custom NS');
       expect(ontology.entityTypes).toHaveLength(1);
       expect(ontology.entityTypes[0].name).toBe('Widget');
+    });
+  });
+
+  describe('rdf:Description typed-node syntax (#85)', () => {
+    // Serializers like Python's rdflib (used by Brick and many published
+    // ontologies) declare resources as <rdf:Description> with an rdf:type
+    // child instead of typed elements like <owl:Class>.
+    const descriptionRdf = `<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#">
+
+    <rdf:Description rdf:about="http://example.org/desc/">
+        <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#Ontology"/>
+        <rdfs:label>Description Ontology</rdfs:label>
+        <rdfs:comment>Serialized via rdf:Description</rdfs:comment>
+    </rdf:Description>
+
+    <rdf:Description rdf:about="http://example.org/desc/Building">
+        <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#Class"/>
+        <rdfs:label>Building</rdfs:label>
+        <rdfs:comment>A building</rdfs:comment>
+    </rdf:Description>
+
+    <rdf:Description rdf:about="http://example.org/desc/Sensor">
+        <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#Class"/>
+        <rdfs:label>Sensor</rdfs:label>
+    </rdf:Description>
+
+    <rdf:Description rdf:about="http://example.org/desc/building_name">
+        <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#DatatypeProperty"/>
+        <rdfs:label>name</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/desc/Building"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+    </rdf:Description>
+
+    <rdf:Description rdf:about="http://example.org/desc/hasSensor">
+        <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#ObjectProperty"/>
+        <rdfs:label>hasSensor</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/desc/Building"/>
+        <rdfs:range rdf:resource="http://example.org/desc/Sensor"/>
+    </rdf:Description>
+
+</rdf:RDF>`;
+
+    it('extracts ontology metadata from rdf:Description elements', () => {
+      const { ontology } = parseRDF(descriptionRdf);
+      expect(ontology.name).toBe('Description Ontology');
+      expect(ontology.description).toBe('Serialized via rdf:Description');
+    });
+
+    it('extracts classes declared via rdf:type', () => {
+      const { ontology } = parseRDF(descriptionRdf);
+      expect(ontology.entityTypes).toHaveLength(2);
+      const names = ontology.entityTypes.map((e) => e.name);
+      expect(names).toContain('Building');
+      expect(names).toContain('Sensor');
+    });
+
+    it('extracts datatype properties declared via rdf:type', () => {
+      const { ontology } = parseRDF(descriptionRdf);
+      const building = ontology.entityTypes.find((e) => e.name === 'Building');
+      expect(building?.properties).toHaveLength(1);
+      expect(building?.properties[0]).toMatchObject({ name: 'name', type: 'string' });
+    });
+
+    it('extracts object properties declared via rdf:type', () => {
+      const { ontology } = parseRDF(descriptionRdf);
+      expect(ontology.relationships).toHaveLength(1);
+      expect(ontology.relationships[0]).toMatchObject({ from: 'building', to: 'sensor' });
+    });
+
+    it('does not duplicate entities when typed elements and descriptions coexist', () => {
+      const mixed = descriptionRdf.replace(
+        '</rdf:RDF>',
+        `<owl:Class rdf:about="http://example.org/desc/Building">
+           <rdfs:label>Building</rdfs:label>
+         </owl:Class></rdf:RDF>`
+      );
+      const { ontology } = parseRDF(mixed);
+      expect(ontology.entityTypes).toHaveLength(2);
+    });
+
+    it('does not treat a same-named predicate outside the RDF namespace as rdf:type', () => {
+      const rdf = `<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:custom="http://example.org/custom#">
+    <owl:Ontology rdf:about="http://example.org/">
+        <rdfs:label>Namespace test</rdfs:label>
+    </owl:Ontology>
+    <rdf:Description rdf:about="http://example.org/NotAClass">
+        <custom:type rdf:resource="http://www.w3.org/2002/07/owl#Class"/>
+        <rdfs:label>Not a class</rdfs:label>
+    </rdf:Description>
+</rdf:RDF>`;
+      const { ontology } = parseRDF(rdf);
+      expect(ontology.entityTypes).toHaveLength(0);
+    });
+  });
+
+  describe('Turtle input detection (#85)', () => {
+    it('gives an actionable error for Turtle content', () => {
+      const ttl = `@prefix brick: <https://brickschema.org/schema/Brick#> .\n@prefix owl: <http://www.w3.org/2002/07/owl#> .\n\nbrick:Building a owl:Class .`;
+      expect(() => parseRDF(ttl)).toThrow(RDFParseError);
+      expect(() => parseRDF(ttl)).toThrow(/Turtle/);
+    });
+
+    it('still reports malformed XML for non-Turtle garbage', () => {
+      expect(() => parseRDF('this is not xml at all')).toThrow(RDFParseError);
+      expect(() => parseRDF('this is not xml at all')).toThrow(/Malformed XML|No ontology metadata/);
+    });
+  });
+
+  describe('rdfs:subClassOf hierarchy (#101)', () => {
+    // Taxonomy-shaped ontologies (e.g. Brick) carry their graph structure in
+    // rdfs:subClassOf rather than object-property domain/range pairs.
+    const hierarchyRdf = `<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#">
+
+    <owl:Class rdf:about="http://example.org/h/Equipment">
+        <rdfs:label>Equipment</rdfs:label>
+    </owl:Class>
+
+    <owl:Class rdf:about="http://example.org/h/HVAC">
+        <rdfs:label>HVAC</rdfs:label>
+        <rdfs:subClassOf rdf:resource="http://example.org/h/Equipment"/>
+    </owl:Class>
+
+    <owl:Class rdf:about="http://example.org/h/AHU">
+        <rdfs:label>AHU</rdfs:label>
+        <rdfs:subClassOf rdf:resource="http://example.org/h/HVAC"/>
+    </owl:Class>
+
+</rdf:RDF>`;
+
+    it('extracts subClassOf references as relationships', () => {
+      const { ontology } = parseRDF(hierarchyRdf);
+      expect(ontology.relationships).toHaveLength(2);
+      expect(ontology.relationships).toContainEqual({
+        id: 'hVAC-subClassOf-equipment',
+        name: 'subClassOf',
+        from: 'hVAC',
+        to: 'equipment',
+        cardinality: 'many-to-one',
+        kind: 'subclass',
+      });
+      expect(ontology.relationships).toContainEqual({
+        id: 'aHU-subClassOf-hVAC',
+        name: 'subClassOf',
+        from: 'aHU',
+        to: 'hVAC',
+        cardinality: 'many-to-one',
+        kind: 'subclass',
+      });
+    });
+
+    it('extracts subClassOf from rdf:Description-typed classes (Brick style)', () => {
+      const rdf = `<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#">
+    <rdf:Description rdf:about="http://example.org/h/Equipment">
+        <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#Class"/>
+        <rdfs:label>Equipment</rdfs:label>
+    </rdf:Description>
+    <rdf:Description rdf:about="http://example.org/h/Fan">
+        <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#Class"/>
+        <rdfs:label>Fan</rdfs:label>
+        <rdfs:subClassOf rdf:resource="http://example.org/h/Equipment"/>
+    </rdf:Description>
+</rdf:RDF>`;
+      const { ontology } = parseRDF(rdf);
+      expect(ontology.relationships).toHaveLength(1);
+      expect(ontology.relationships[0]).toMatchObject({
+        name: 'subClassOf',
+        from: 'fan',
+        to: 'equipment',
+        kind: 'subclass',
+      });
+    });
+
+    it('supports multiple parents (multiple inheritance)', () => {
+      const rdf = hierarchyRdf.replace(
+        '<rdfs:subClassOf rdf:resource="http://example.org/h/HVAC"/>',
+        `<rdfs:subClassOf rdf:resource="http://example.org/h/HVAC"/>
+         <rdfs:subClassOf rdf:resource="http://example.org/h/Equipment"/>`
+      );
+      const { ontology } = parseRDF(rdf);
+      expect(ontology.relationships).toHaveLength(3);
+      const ahuParents = ontology.relationships
+        .filter((r) => r.from === 'aHU')
+        .map((r) => r.to)
+        .sort();
+      expect(ahuParents).toEqual(['equipment', 'hVAC']);
+    });
+
+    it('skips references to classes not present in the document', () => {
+      const rdf = hierarchyRdf.replace(
+        'http://example.org/h/Equipment"/>',
+        'http://www.w3.org/2002/07/owl#Thing"/>'
+      );
+      const { ontology } = parseRDF(rdf);
+      // HVAC → owl:Thing dropped; AHU → HVAC kept
+      expect(ontology.relationships).toHaveLength(1);
+      expect(ontology.relationships[0]).toMatchObject({ from: 'aHU', to: 'hVAC' });
+    });
+
+    it('skips self-references and duplicate edges', () => {
+      const rdf = hierarchyRdf.replace(
+        '<rdfs:subClassOf rdf:resource="http://example.org/h/Equipment"/>',
+        `<rdfs:subClassOf rdf:resource="http://example.org/h/Equipment"/>
+         <rdfs:subClassOf rdf:resource="http://example.org/h/Equipment"/>
+         <rdfs:subClassOf rdf:resource="http://example.org/h/HVAC"/>`
+      );
+      const { ontology } = parseRDF(rdf);
+      expect(ontology.relationships).toHaveLength(2);
+    });
+
+    it('ignores nested owl:Restriction subClassOf nodes', () => {
+      const rdf = hierarchyRdf.replace(
+        '<rdfs:subClassOf rdf:resource="http://example.org/h/HVAC"/>',
+        `<rdfs:subClassOf rdf:resource="http://example.org/h/HVAC"/>
+         <rdfs:subClassOf>
+           <owl:Restriction>
+             <owl:onProperty rdf:resource="http://example.org/h/hasPart"/>
+             <owl:someValuesFrom rdf:resource="http://example.org/h/Equipment"/>
+           </owl:Restriction>
+         </rdfs:subClassOf>`
+      );
+      const { ontology } = parseRDF(rdf);
+      expect(ontology.relationships).toHaveLength(2);
+    });
+
+    it('ignores a same-named predicate outside the RDFS namespace', () => {
+      const rdf = hierarchyRdf
+        .replace(
+          'xmlns:owl="http://www.w3.org/2002/07/owl#">',
+          `xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:custom="http://example.org/custom#">`
+        )
+        .replace(
+          '<rdfs:label>Equipment</rdfs:label>',
+          `<rdfs:label>Equipment</rdfs:label>
+        <custom:subClassOf rdf:resource="http://example.org/h/AHU"/>`
+        );
+      const { ontology } = parseRDF(rdf);
+      expect(ontology.relationships).toHaveLength(2);
+      expect(ontology.relationships).not.toContainEqual(
+        expect.objectContaining({ from: 'equipment', to: 'aHU' })
+      );
+    });
+
+    it('coexists with object-property relationships', () => {
+      const rdf = hierarchyRdf.replace(
+        '</rdf:RDF>',
+        `<owl:ObjectProperty rdf:about="http://example.org/h/feeds">
+           <rdfs:label>feeds</rdfs:label>
+           <rdfs:domain rdf:resource="http://example.org/h/AHU"/>
+           <rdfs:range rdf:resource="http://example.org/h/HVAC"/>
+         </owl:ObjectProperty></rdf:RDF>`
+      );
+      const { ontology } = parseRDF(rdf);
+      expect(ontology.relationships).toHaveLength(3);
+      expect(ontology.relationships.map((r) => r.name)).toContain('feeds');
+    });
+
+    it('keeps entity and relationship IDs unique across namespace collisions', () => {
+      const rdf = `<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#">
+    <owl:Class rdf:about="http://example.org/one/Thing">
+        <rdfs:label>First thing</rdfs:label>
+    </owl:Class>
+    <owl:Class rdf:about="http://example.org/two/Thing">
+        <rdfs:label>Second thing</rdfs:label>
+        <rdfs:subClassOf rdf:resource="http://example.org/one/Thing"/>
+    </owl:Class>
+    <owl:ObjectProperty rdf:about="http://example.org/one/connects">
+        <rdfs:domain rdf:resource="http://example.org/one/Thing"/>
+        <rdfs:range rdf:resource="http://example.org/two/Thing"/>
+    </owl:ObjectProperty>
+    <owl:ObjectProperty rdf:about="http://example.org/two/connects">
+        <rdfs:domain rdf:resource="http://example.org/two/Thing"/>
+        <rdfs:range rdf:resource="http://example.org/one/Thing"/>
+    </owl:ObjectProperty>
+</rdf:RDF>`;
+      const { ontology } = parseRDF(rdf);
+      expect(ontology.entityTypes.map((entity) => entity.id)).toEqual(['thing', 'thing-2']);
+      expect(ontology.relationships.map((relationship) => relationship.id)).toEqual([
+        'connects',
+        'connects-2',
+        'thing-2-subClassOf-thing',
+      ]);
+      expect(ontology.relationships[0]).toMatchObject({ from: 'thing', to: 'thing-2' });
+      expect(ontology.relationships[1]).toMatchObject({ from: 'thing-2', to: 'thing' });
+    });
+
+    it('keeps IDs unique when a class and object property share a local name', () => {
+      const rdf = `<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#">
+    <owl:Class rdf:about="http://example.org/Shared/shared"/>
+    <owl:Class rdf:about="http://example.org/Shared/target"/>
+    <owl:ObjectProperty rdf:about="http://example.org/Shared/shared">
+        <rdfs:domain rdf:resource="http://example.org/Shared/shared"/>
+        <rdfs:range rdf:resource="http://example.org/Shared/target"/>
+    </owl:ObjectProperty>
+</rdf:RDF>`;
+      const { ontology } = parseRDF(rdf);
+      const allIds = [
+        ...ontology.entityTypes.map((entity) => entity.id),
+        ...ontology.relationships.map((relationship) => relationship.id),
+      ];
+
+      expect(ontology.relationships[0]).toMatchObject({
+        id: 'shared-2',
+        from: 'shared',
+        to: 'target',
+      });
+      expect(new Set(allIds).size).toBe(allIds.length);
+    });
+
+    it('avoids ID collisions between object properties and hierarchy edges', () => {
+      const rdf = hierarchyRdf.replace(
+        '</rdf:RDF>',
+        `<owl:ObjectProperty rdf:about="http://example.org/h/hVAC-subClassOf-equipment">
+           <rdfs:domain rdf:resource="http://example.org/h/AHU"/>
+           <rdfs:range rdf:resource="http://example.org/h/Equipment"/>
+         </owl:ObjectProperty></rdf:RDF>`
+      );
+      const { ontology } = parseRDF(rdf);
+      expect(new Set(ontology.relationships.map((relationship) => relationship.id)).size)
+        .toBe(ontology.relationships.length);
+      expect(ontology.relationships.map((relationship) => relationship.id)).toContain(
+        'hVAC-subClassOf-equipment-2'
+      );
+    });
+  });
+
+  describe('standards-tool RDF/XML forms', () => {
+    it('parses referenced RDF lists and inverse SHACL path nodes', () => {
+      const rdf = `<?xml version="1.0"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+         xmlns:owl="http://www.w3.org/2002/07/owl#"
+         xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+         xmlns:sh="http://www.w3.org/ns/shacl#">
+  <owl:Ontology rdf:about="http://example.org/interop/">
+    <rdfs:label>Interoperability</rdfs:label>
+  </owl:Ontology>
+  <owl:Class rdf:about="http://example.org/interop/Person">
+    <rdfs:label>Person</rdfs:label>
+    <owl:hasKey rdf:nodeID="key-list"/>
+  </owl:Class>
+  <owl:Class rdf:about="http://example.org/interop/Team">
+    <rdfs:label>Team</rdfs:label>
+  </owl:Class>
+  <owl:DatatypeProperty rdf:about="http://example.org/interop/person_personId">
+    <rdfs:label>personId</rdfs:label>
+    <rdfs:domain rdf:resource="http://example.org/interop/Person"/>
+    <rdfs:range rdf:resource="${XSD_NS}string"/>
+  </owl:DatatypeProperty>
+  <owl:DatatypeProperty rdf:about="http://example.org/interop/person_status">
+    <rdfs:label>status</rdfs:label>
+    <rdfs:domain rdf:resource="http://example.org/interop/Person"/>
+    <rdfs:range rdf:resource="${XSD_NS}string"/>
+  </owl:DatatypeProperty>
+  <owl:ObjectProperty rdf:about="http://example.org/interop/memberOf">
+    <rdfs:label>member of</rdfs:label>
+    <rdfs:domain rdf:resource="http://example.org/interop/Person"/>
+    <rdfs:range rdf:resource="http://example.org/interop/Team"/>
+  </owl:ObjectProperty>
+  <sh:PropertyShape rdf:about="http://example.org/interop/idShape">
+    <sh:path rdf:resource="http://example.org/interop/person_personId"/>
+    <sh:order rdf:datatype="${XSD_NS}decimal">0</sh:order>
+  </sh:PropertyShape>
+  <sh:PropertyShape rdf:about="http://example.org/interop/statusShape">
+    <sh:path rdf:resource="http://example.org/interop/person_status"/>
+    <sh:order rdf:datatype="${XSD_NS}decimal">1</sh:order>
+    <sh:in rdf:nodeID="enum-list-1"/>
+  </sh:PropertyShape>
+  <sh:PropertyShape rdf:about="http://example.org/interop/memberForward">
+    <sh:path rdf:resource="http://example.org/interop/memberOf"/>
+    <sh:maxCount rdf:datatype="${XSD_NS}integer">1</sh:maxCount>
+  </sh:PropertyShape>
+  <sh:PropertyShape rdf:about="http://example.org/interop/memberInverse">
+    <sh:path rdf:nodeID="inverse-member-path"/>
+    <sh:maxCount rdf:datatype="${XSD_NS}integer">1</sh:maxCount>
+  </sh:PropertyShape>
+  <rdf:Description rdf:nodeID="key-list">
+    <rdf:first rdf:resource="http://example.org/interop/person_personId"/>
+    <rdf:rest rdf:resource="${RDF_NS}nil"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="enum-list-1">
+    <rdf:first rdf:datatype="${XSD_NS}string">Active</rdf:first>
+    <rdf:rest rdf:nodeID="enum-list-2"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="enum-list-2">
+    <rdf:first rdf:datatype="${XSD_NS}string">Inactive</rdf:first>
+    <rdf:rest rdf:resource="${RDF_NS}nil"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="inverse-member-path">
+    <sh:inversePath rdf:resource="http://example.org/interop/memberOf"/>
+  </rdf:Description>
+</rdf:RDF>`;
+
+      const { ontology } = parseRDF(rdf);
+      const person = ontology.entityTypes.find((entity) => entity.id === 'person');
+
+      expect(person?.properties.map((property) => property.name)).toEqual([
+        'personId',
+        'status',
+      ]);
+      expect(person?.properties[0].isIdentifier).toBe(true);
+      expect(person?.properties[1]).toMatchObject({
+        type: 'enum',
+        values: ['Active', 'Inactive'],
+      });
+      expect(ontology.relationships[0]).toMatchObject({
+        id: 'memberOf',
+        cardinality: 'one-to-one',
+      });
+    });
+
+    it('does not coerce resource-valued SHACL lists into string enums', () => {
+      const rdf = `<?xml version="1.0"?>
+<rdf:RDF xmlns:rdf="${RDF_NS}"
+         xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+         xmlns:owl="http://www.w3.org/2002/07/owl#"
+         xmlns:sh="http://www.w3.org/ns/shacl#">
+  <owl:Class rdf:about="http://example.org/Item"/>
+  <sh:PropertyShape rdf:about="http://example.org/statusShape">
+    <sh:path>
+      <owl:DatatypeProperty rdf:about="http://example.org/item_status">
+        <rdfs:label>status</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/Item"/>
+      </owl:DatatypeProperty>
+    </sh:path>
+    <sh:in rdf:nodeID="status-list"/>
+  </sh:PropertyShape>
+  <rdf:Description rdf:nodeID="status-list">
+    <rdf:first rdf:resource="http://example.org/Active"/>
+    <rdf:rest rdf:resource="${RDF_NS}nil"/>
+  </rdf:Description>
+</rdf:RDF>`;
+
+      const { ontology } = parseRDF(rdf);
+      expect(ontology.entityTypes[0].properties[0]).toMatchObject({
+        name: 'status',
+        type: 'string',
+      });
+      expect(ontology.entityTypes[0].properties[0].values).toBeUndefined();
     });
   });
 });

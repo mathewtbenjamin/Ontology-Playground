@@ -144,4 +144,4 @@ This scans the DOM for new `.ontology-embed` elements and mounts widgets on any 
 
 ## Live Demo
 
-See the [sample embed page](embed/samples.html) on the deployed site for working examples.
+See the [sample embed page](https://microsoft.github.io/Ontology-Playground/embed/samples.html) on the deployed site for working examples.
