@@ -252,7 +252,9 @@ frontend, set `VITE_API_BASE` to the Function App's `/api` URL for the AI
 builder and `VITE_GITHUB_OAUTH_BASE` to its `/api/github-oauth` URL for the
 GitHub device flow. Configure the Function App to allow the frontend origin
 through CORS. Set the repository Actions variable `VITE_ENABLE_AI_BUILDER` to
-`true` when the deployed frontend should expose the AI builder.
+`true` when the deployed frontend should expose the AI builder. Generated and
+edited ontologies must pass the Designer's Fabric IQ validation rules before
+they can be applied; validation failures remain in the builder for correction.
 
 ## Project Structure
 
